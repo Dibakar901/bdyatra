@@ -9,10 +9,11 @@ const DEFAULT_SUPABASE_ANON_KEY =
 const envSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const envSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-if (!envSupabaseUrl || !envSupabaseAnonKey) {
-  console.warn(
-    '[BDYatra Supabase] WARNING: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing from environment variables!'
-  );
+if (!envSupabaseUrl) {
+  console.error('[BDYatra Supabase] ERROR: VITE_SUPABASE_URL is missing or undefined.');
+}
+if (!envSupabaseAnonKey) {
+  console.error('[BDYatra Supabase] ERROR: VITE_SUPABASE_ANON_KEY is missing or undefined.');
 }
 
 export const supabaseUrl: string = envSupabaseUrl || DEFAULT_SUPABASE_URL;
