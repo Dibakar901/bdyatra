@@ -1,0 +1,305 @@
+import { Destination, DestinationFilterState } from '../types/destination';
+import { INITIAL_DESTINATIONS } from '../data/destinationsData';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
+
+const LOCAL_DESTINATIONS_KEY = 'bdyatra_custom_destinations';
+const LOCAL_DELETED_DESTINATIONS_KEY = 'bdyatra_deleted_destinations';
+
+function getStoredCustomDestinations(): Destination[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_DESTINATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function getStoredDeletedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_DELETED_DESTINATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mapDbDestination(row: any): Destination {
+  return {
+    id: row.id,
+    name: row.title || row.name || 'Untitled Destination',
+    slug: row.slug,
+    tagline: row.tagline || '',
+    description: row.description || '',
+    division: ((row.division || row.division_id || 'Dhaka').charAt(0).toUpperCase() + (row.division || row.division_id || 'Dhaka').slice(1)) as any,
+    district: row.district || row.district_id || 'Dhaka',
+    category: row.category || 'Nature & Wildlife',
+    image: row.cover_image || row.image || '/src/assets/images/bdyatra_hero_delta_1793169488734.jpg',
+    galleryImages: row.gallery_images || row.galleryImages,
+    bestSeason: row.best_season || row.bestSeason || 'November to March',
+    estimatedBudget: row.estimated_budget || row.estimatedBudget,
+    googleMapUrl: row.google_map_url || row.googleMapUrl,
+    phone: row.phone,
+    website: row.website,
+    rating: Number(row.rating) || 4.8,
+    reviewCount: Number(row.review_count || row.reviewCount) || 1,
+    featured: Boolean(row.is_featured ?? row.featured),
+    published: row.is_published !== undefined ? row.is_published : (row.published !== undefined ? row.published : true),
+  };
+}
+
+export async function getDestinations(filters?: DestinationFilterState): Promise<Destination[]> {
+  let destinations: Destination[] = [];
+  const deletedIds = getStoredDeletedIds();
+  const customList = getStoredCustomDestinations();
+
+  if (isSupabaseConfigured && supabase) {
+    try {
+      let query = supabase.from('destinations').select('*');
+      if (filters?.division && filters.division !== 'All') {
+        query = query.eq('division_id', filters.division.toLowerCase());
+      }
+      if (filters?.category && filters.category !== 'All') {
+        query = query.eq('category', filters.category);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        destinations = data.map(mapDbDestination);
+      } else {
+        destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
+      }
+    } catch {
+      destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
+    }
+  } else {
+    destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
+  }
+
+  // Merge custom modifications & additions
+  const combinedMap = new Map<string, Destination>();
+  destinations.forEach((d) => combinedMap.set(d.id, d));
+  customList.forEach((c) => combinedMap.set(c.id, c));
+
+  let finalDestinations = Array.from(combinedMap.values()).filter(
+    (d) => !deletedIds.includes(d.id)
+  );
+
+  // Client-side query filtering
+  if (filters) {
+    if (filters.division && filters.division !== 'All') {
+      const targetDiv = filters.division.toLowerCase();
+      finalDestinations = finalDestinations.filter((d) => {
+        const div = d.division.toLowerCase();
+        if (targetDiv === 'chittagong' || targetDiv === 'chattogram') {
+          return div === 'chittagong' || div === 'chattogram';
+        }
+        return div === targetDiv;
+      });
+    }
+    if (filters.district && filters.district !== 'All') {
+      const targetDist = filters.district.toLowerCase();
+      finalDestinations = finalDestinations.filter((d) =>
+        d.district.toLowerCase().includes(targetDist)
+      );
+    }
+    if (filters.category && filters.category !== 'All') {
+      finalDestinations = finalDestinations.filter((d) => d.category === filters.category);
+    }
+    if (filters.searchQuery && filters.searchQuery.trim().length > 0) {
+      const q = filters.searchQuery.toLowerCase().trim();
+      finalDestinations = finalDestinations.filter(
+        (d) =>
+          d.name.toLowerCase().includes(q) ||
+          d.tagline.toLowerCase().includes(q) ||
+          d.district.toLowerCase().includes(q) ||
+          d.division.toLowerCase().includes(q) ||
+          d.description.toLowerCase().includes(q)
+      );
+    }
+  }
+
+  return finalDestinations;
+}
+
+export async function getDestinationById(idOrSlug: string): Promise<Destination | null> {
+  const all = await getDestinations();
+  return (
+    all.find((d) => d.id === idOrSlug || d.slug === idOrSlug) || null
+  );
+}
+
+/**
+ * Admin: Create a new destination entry
+ */
+export async function createDestination(
+  destinationData: Partial<Destination>
+): Promise<{ success: boolean; data: Destination; message: string }> {
+  const newId = destinationData.id || `dest-${Date.now()}`;
+  const slug =
+    destinationData.slug ||
+    (destinationData.name || 'destination')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)+/g, '');
+
+  const newDestination: Destination = {
+    id: newId,
+    name: destinationData.name || 'Untitled Destination',
+    slug,
+    tagline: destinationData.tagline || 'Scenic travel landmark in Bangladesh',
+    description: destinationData.description || '',
+    division: destinationData.division || 'Dhaka',
+    district: destinationData.district || 'Dhaka',
+    category: destinationData.category || 'Nature & Wildlife',
+    image:
+      destinationData.image ||
+      '/src/assets/images/bdyatra_hero_delta_1793169488734.jpg',
+    galleryImages: destinationData.galleryImages || [
+      destinationData.image || '/src/assets/images/bdyatra_hero_delta_1793169488734.jpg',
+    ],
+    bestSeason: destinationData.bestSeason || 'November to March',
+    estimatedBudget: destinationData.estimatedBudget || undefined,
+    googleMapUrl: destinationData.googleMapUrl || '',
+    phone: destinationData.phone || '',
+    website: destinationData.website || '',
+    rating: destinationData.rating || 4.8,
+    reviewCount: destinationData.reviewCount || 1,
+    featured: Boolean(destinationData.featured),
+    published: destinationData.published !== undefined ? destinationData.published : true,
+  };
+
+  // Attempt Supabase insert
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('destinations').insert({
+        id: newId,
+        title: newDestination.name,
+        slug: newDestination.slug,
+        tagline: newDestination.tagline,
+        description: newDestination.description,
+        division_id: newDestination.division.toLowerCase(),
+        category: newDestination.category,
+        cover_image: newDestination.image,
+        gallery_images: newDestination.galleryImages,
+        best_season: newDestination.bestSeason,
+        estimated_budget: newDestination.estimatedBudget,
+        google_map_url: newDestination.googleMapUrl,
+        phone: newDestination.phone,
+        website: newDestination.website,
+        rating: newDestination.rating,
+        review_count: newDestination.reviewCount,
+        is_featured: newDestination.featured,
+        is_published: newDestination.published,
+      });
+    } catch (err) {
+      console.warn('[BDYatra Supabase] Destination insert error:', err);
+    }
+  }
+
+  // Save to local custom store
+  const existing = getStoredCustomDestinations();
+  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify([newDestination, ...existing]));
+
+  // Also remove from deleted IDs if re-created
+  const deleted = getStoredDeletedIds().filter((id) => id !== newId);
+  localStorage.setItem(LOCAL_DELETED_DESTINATIONS_KEY, JSON.stringify(deleted));
+
+  return {
+    success: true,
+    data: newDestination,
+    message: `Destination "${newDestination.name}" created successfully.`,
+  };
+}
+
+/**
+ * Admin: Update an existing destination
+ */
+export async function updateDestination(
+  id: string,
+  updates: Partial<Destination>
+): Promise<{ success: boolean; data?: Destination; message: string }> {
+  const all = await getDestinations();
+  const target = all.find((d) => d.id === id);
+
+  if (!target) {
+    return { success: false, message: 'Destination not found' };
+  }
+
+  const updated: Destination = {
+    ...target,
+    ...updates,
+    id, // protect ID
+  };
+
+  // Attempt Supabase update
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase
+        .from('destinations')
+        .update({
+          title: updated.name,
+          slug: updated.slug,
+          tagline: updated.tagline,
+          description: updated.description,
+          division_id: updated.division.toLowerCase(),
+          category: updated.category,
+          cover_image: updated.image,
+          gallery_images: updated.galleryImages,
+          best_season: updated.bestSeason,
+          estimated_budget: updated.estimatedBudget,
+          google_map_url: updated.googleMapUrl,
+          phone: updated.phone,
+          website: updated.website,
+          rating: updated.rating,
+          review_count: updated.reviewCount,
+          is_featured: updated.featured,
+          is_published: updated.published ?? true,
+        })
+        .eq('id', id);
+    } catch (err) {
+      console.warn('[BDYatra Supabase] Destination update error:', err);
+    }
+  }
+
+  // Save in local storage
+  const existing = getStoredCustomDestinations().filter((d) => d.id !== id);
+  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify([updated, ...existing]));
+
+  return {
+    success: true,
+    data: updated,
+    message: `Destination "${updated.name}" updated successfully.`,
+  };
+}
+
+/**
+ * Admin: Delete destination
+ */
+export async function deleteDestination(
+  id: string
+): Promise<{ success: boolean; message: string }> {
+  if (isSupabaseConfigured && supabase) {
+    try {
+      await supabase.from('destinations').delete().eq('id', id);
+    } catch (err) {
+      console.warn('[BDYatra Supabase] Destination delete error:', err);
+    }
+  }
+
+  // Remove from custom list
+  const existing = getStoredCustomDestinations().filter((d) => d.id !== id);
+  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify(existing));
+
+  // Add to deleted IDs
+  const deleted = getStoredDeletedIds();
+  if (!deleted.includes(id)) {
+    deleted.push(id);
+    localStorage.setItem(LOCAL_DELETED_DESTINATIONS_KEY, JSON.stringify(deleted));
+  }
+
+  return {
+    success: true,
+    message: 'Destination removed successfully.',
+  };
+}

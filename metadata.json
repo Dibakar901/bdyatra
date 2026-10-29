@@ -1,0 +1,6 @@
+{
+  "name": "BDYatra - Bangladesh Travel Discovery & Directory",
+  "description": "Discover Bangladesh's premier travel destinations, eco-resorts, heritage trails, and local directories with BDYatra.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
