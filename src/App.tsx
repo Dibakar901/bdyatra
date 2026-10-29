@@ -525,10 +525,12 @@ export default function App() {
 
   const PublicLayout = () => (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
-      <SupabaseStatusBanner
-        onOpenConsole={() => setIsConsoleOpen(true)}
-        onOpenSEO={() => setIsSEOInspectorOpen(true)}
-      />
+      {import.meta.env.DEV && (
+        <SupabaseStatusBanner
+          onOpenConsole={() => setIsConsoleOpen(true)}
+          onOpenSEO={() => setIsSEOInspectorOpen(true)}
+        />
+      )}
 
       <Header
         activeTab={activeTab}
@@ -544,7 +546,7 @@ export default function App() {
           setActiveBlogReader(null);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        onOpenConsole={() => setIsConsoleOpen(true)}
+        onOpenConsole={import.meta.env.DEV ? () => setIsConsoleOpen(true) : undefined}
       />
 
       {!activeDestinationDetail && !activeBlogReader && (
@@ -618,10 +620,12 @@ export default function App() {
                   </button>
                 ))}
               </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" onClick={() => setIsSEOInspectorOpen(true)} icon={<Globe className="h-3.5 w-3.5 text-emerald-600" />} className="text-xs">SEO & Meta</Button>
-                <Button variant="outline" size="sm" onClick={() => setIsConsoleOpen(true)} icon={<Database className="h-3.5 w-3.5 text-slate-600" />} className="text-xs">Supabase Schema</Button>
-              </div>
+              {import.meta.env.DEV && (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsSEOInspectorOpen(true)} icon={<Globe className="h-3.5 w-3.5 text-emerald-600" />} className="text-xs">SEO & Meta</Button>
+                  <Button variant="outline" size="sm" onClick={() => setIsConsoleOpen(true)} icon={<Database className="h-3.5 w-3.5 text-slate-600" />} className="text-xs">Supabase Schema</Button>
+                </div>
+              )}
             </div>
 
             {activeTab === 'destinations' && <DestinationsDirectoryView destinations={destinations} loading={destinationsLoading} filters={destinationFilters} onFilterChange={setDestinationFilters} onSelectDestination={(dest) => { setActiveDestinationDetail(dest); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />}
@@ -649,12 +653,16 @@ export default function App() {
           setActiveBlogReader(null);
           window.scrollTo({ top: 0, behavior: 'smooth' });
         }}
-        onOpenSEO={() => setIsSEOInspectorOpen(true)}
+        onOpenSEO={import.meta.env.DEV ? () => setIsSEOInspectorOpen(true) : undefined}
       />
 
       <BlogDetailModal blog={selectedBlogForModal} isOpen={isBlogModalOpen} onClose={() => setIsBlogModalOpen(false)} onExploreDestination={(destId) => { getDestinationById(destId).then(dest => dest && setActiveDestinationDetail(dest)); }} />
-      <DatabaseConsoleModal isOpen={isConsoleOpen} onClose={() => setIsConsoleOpen(false)} />
-      <SEOInspectorModal isOpen={isSEOInspectorOpen} onClose={() => setIsSEOInspectorOpen(false)} currentMeta={currentSEOMeta} currentJsonLd={currentJsonLd} sitemapEntries={[]} />
+      {import.meta.env.DEV && (
+        <>
+          <DatabaseConsoleModal isOpen={isConsoleOpen} onClose={() => setIsConsoleOpen(false)} />
+          <SEOInspectorModal isOpen={isSEOInspectorOpen} onClose={() => setIsSEOInspectorOpen(false)} currentMeta={currentSEOMeta} currentJsonLd={currentJsonLd} sitemapEntries={[]} />
+        </>
+      )}
     </div>
   );
 
