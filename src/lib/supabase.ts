@@ -2,7 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { Database } from '../types/supabase';
 
 // Production connection credentials
-const PRODUCTION_URL = 'https://kdrifllxmjwsxonmttyr.supabase.co';
+const PRODUCTION_URL = 'https://kdriflxmjwsxonmttyr.supabase.co';
 const PRODUCTION_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkcmlmbGx4bWp3c3hvbm10dHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNjk1MTksImV4cCI6MjEwODc0NTUxOX0.JfbJb2BAN8BZAJNCbPfO3MOBnLqpsipM7bPRBJQg7YE';
 
 // Explicitly map environment variables with hardcoded fallbacks
