@@ -6,11 +6,17 @@ const DEFAULT_SUPABASE_URL = 'https://kdrifllxmjwsxonmttyr.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtkcmlmbGx4bWp3c3hvbm10dHlyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMxNjk1MTksImV4cCI6MjEwODc0NTUxOX0.JfbJb2BAN8BZAJNCbPfO3MOBnLqpsipM7bPRBJQg7YE';
 
-export const supabaseUrl: string =
-  (import.meta.env.VITE_SUPABASE_URL as string) || DEFAULT_SUPABASE_URL;
+const envSupabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const envSupabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabaseAnonKey: string =
-  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || DEFAULT_SUPABASE_ANON_KEY;
+if (!envSupabaseUrl || !envSupabaseAnonKey) {
+  console.warn(
+    '[BDYatra Supabase] WARNING: VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY is missing from environment variables!'
+  );
+}
+
+export const supabaseUrl: string = envSupabaseUrl || DEFAULT_SUPABASE_URL;
+export const supabaseAnonKey: string = envSupabaseAnonKey || DEFAULT_SUPABASE_ANON_KEY;
 
 // Check validity
 export const isSupabaseConfigured: boolean = Boolean(
