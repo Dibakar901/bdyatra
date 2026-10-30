@@ -1,28 +1,6 @@
 import { Destination, DestinationFilterState } from '../types/destination';
-import { INITIAL_DESTINATIONS } from '../data/destinationsData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
 import { Database } from '../types/supabase';
-
-const LOCAL_DESTINATIONS_KEY = 'bdyatra_custom_destinations';
-const LOCAL_DELETED_DESTINATIONS_KEY = 'bdyatra_deleted_destinations';
-
-function getStoredCustomDestinations(): Destination[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_DESTINATIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function getStoredDeletedIds(): string[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_DELETED_DESTINATIONS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
 
 function mapDbDestination(row: any): Destination {
   return {
@@ -50,12 +28,12 @@ function mapDbDestination(row: any): Destination {
 
 export async function getDestinations(filters?: DestinationFilterState): Promise<Destination[]> {
   let destinations: Destination[] = [];
-  const deletedIds = getStoredDeletedIds();
-  const customList = getStoredCustomDestinations();
 
   if (isSupabaseConfigured && supabase) {
     try {
       let query = (supabase as any).from('destinations').select('*');
+      
+      // Basic server-side filtering
       if (filters?.division && filters.division !== 'All') {
         query = query.eq('division_id', filters.division.toLowerCase());
       }
@@ -64,37 +42,27 @@ export async function getDestinations(filters?: DestinationFilterState): Promise
       }
 
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         destinations = data.map(mapDbDestination);
-      } else {
-        destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
+      } else if (error) {
+        console.warn('[BDYatra Supabase] Destination fetch error:', error.message);
+        // If DB is empty or fails, we might want to return 0 records instead of mock
+        // but for now, we'll keep it empty if Supabase says so.
       }
-    } catch {
-      destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
+    } catch (err) {
+      console.error('[BDYatra Supabase] Destination fetch exception:', err);
     }
-  } else {
-    destinations = INITIAL_DESTINATIONS.map((d) => mapDbDestination(d));
   }
 
-  // Merge custom modifications & additions
-  const combinedMap = new Map<string, Destination>();
-  destinations.forEach((d) => combinedMap.set(d.id, d));
-  customList.forEach((c) => combinedMap.set(c.id, c));
+  let finalDestinations = [...destinations];
 
-  let finalDestinations = Array.from(combinedMap.values()).filter(
-    (d) => !deletedIds.includes(d.id)
-  );
-
-  // Client-side query filtering
+  // Client-side query filtering (for search and complex overlaps)
   if (filters) {
     if (filters.division && filters.division !== 'All') {
       const targetDiv = filters.division.toLowerCase();
       finalDestinations = finalDestinations.filter((d) => {
         const div = d.division.toLowerCase();
-        if (targetDiv === 'chittagong' || targetDiv === 'chattogram') {
-          return div === 'chittagong' || div === 'chattogram';
-        }
-        return div === targetDiv;
+        return div === targetDiv || (targetDiv === 'chittagong' && div === 'chattogram');
       });
     }
     if (filters.district && filters.district !== 'All') {
@@ -199,23 +167,20 @@ export async function createDestination(
       console.error('[BDYatra Supabase] Destination insert error:', error);
       return {
         success: false,
-        message: `Database Error: ${error.message}. (Hint: Ensure Division "${newDestination.division}" exists in Supabase "divisions" table).`,
+        message: `Database Error: ${error.message}. (Hint: Ensure Division "${newDestination.division}" exists in Supabase and your user profile has Admin role).`,
       };
     }
+
+    return {
+      success: true,
+      data: newDestination,
+      message: `Destination "${newDestination.name}" created successfully in Supabase.`,
+    };
   }
 
-  // Save to local custom store (as backup/fallback)
-  const existing = getStoredCustomDestinations();
-  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify([newDestination, ...existing]));
-
-  // Also remove from deleted IDs if re-created
-  const deleted = getStoredDeletedIds().filter((id) => id !== newId);
-  localStorage.setItem(LOCAL_DELETED_DESTINATIONS_KEY, JSON.stringify(deleted));
-
   return {
-    success: true,
-    data: newDestination,
-    message: `Destination "${newDestination.name}" created successfully and synced with Supabase.`,
+    success: false,
+    message: 'Supabase is not configured. Cannot save destination.',
   };
 }
 
@@ -226,39 +191,26 @@ export async function updateDestination(
   id: string,
   updates: Partial<Destination>
 ): Promise<{ success: boolean; data?: Destination; message: string }> {
-  const all = await getDestinations();
-  const target = all.find((d) => d.id === id);
-
-  if (!target) {
-    return { success: false, message: 'Destination not found' };
-  }
-
-  const updated: Destination = {
-    ...target,
-    ...updates,
-    id, // protect ID
-  };
-
   // Attempt Supabase update
   if (isSupabaseConfigured && supabase) {
     const { error } = await (supabase as any)
       .from('destinations')
       .update({
-        title: updated.name,
-        slug: updated.slug,
-        tagline: updated.tagline,
-        description: updated.description,
-        division_id: updated.division.toLowerCase(),
-        district_id: updated.district.toLowerCase(),
-        category: updated.category,
-        cover_image: updated.image,
-        gallery_images: updated.galleryImages,
-        best_season: updated.bestSeason,
-        estimated_budget: updated.estimatedBudget,
-        rating: updated.rating,
-        review_count: updated.reviewCount,
-        is_featured: updated.featured,
-        is_published: updated.published ?? true,
+        title: updates.name,
+        slug: updates.slug,
+        tagline: updates.tagline,
+        description: updates.description,
+        division_id: updates.division?.toLowerCase(),
+        district_id: updates.district?.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+        category: updates.category,
+        cover_image: updates.image,
+        gallery_images: updates.galleryImages,
+        best_season: updates.bestSeason,
+        estimated_budget: updates.estimatedBudget,
+        rating: updates.rating,
+        review_count: updates.reviewCount,
+        is_featured: updates.featured,
+        is_published: updates.published,
         updated_at: new Date().toISOString()
       })
       .eq('id', id);
@@ -270,17 +222,18 @@ export async function updateDestination(
         message: `Supabase Update Error: ${error.message}`,
       };
     }
+
+    // Fetch updated to return
+    const { data: updatedData } = await (supabase as any).from('destinations').select('*').eq('id', id).single();
+    
+    return {
+      success: true,
+      data: updatedData ? mapDbDestination(updatedData) : undefined,
+      message: `Destination updated successfully in Supabase.`,
+    };
   }
 
-  // Save in local storage
-  const existing = getStoredCustomDestinations().filter((d) => d.id !== id);
-  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify([updated, ...existing]));
-
-  return {
-    success: true,
-    data: updated,
-    message: `Destination "${updated.name}" updated successfully and synced.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -298,21 +251,11 @@ export async function deleteDestination(
         message: `Supabase Delete Error: ${error.message}`,
       };
     }
+    return {
+      success: true,
+      message: 'Destination removed successfully from Supabase.',
+    };
   }
 
-  // Remove from custom list
-  const existing = getStoredCustomDestinations().filter((d) => d.id !== id);
-  localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify(existing));
-
-  // Add to deleted IDs
-  const deleted = getStoredDeletedIds();
-  if (!deleted.includes(id)) {
-    deleted.push(id);
-    localStorage.setItem(LOCAL_DELETED_DESTINATIONS_KEY, JSON.stringify(deleted));
-  }
-
-  return {
-    success: true,
-    message: 'Destination removed successfully from site and database.',
-  };
+  return { success: false, message: 'Database not connected' };
 }

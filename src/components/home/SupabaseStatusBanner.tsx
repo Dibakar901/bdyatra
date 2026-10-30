@@ -26,7 +26,7 @@ export const SupabaseStatusBanner: React.FC<SupabaseStatusBannerProps> = ({
           </div>
           <span className="text-slate-500 hidden sm:inline">|</span>
           <span className="text-slate-300 hidden md:inline truncate max-w-md">
-            Target: <code className="text-emerald-400">kdrifllxmjwsxonmttyr.supabase.co</code> (RLS Secured)
+            Target: <code className="text-emerald-400">kdriflxmjwsxonmttyr.supabase.co</code> (RLS Secured)
           </span>
         </div>
 
@@ -85,7 +85,7 @@ export const SupabaseStatusBanner: React.FC<SupabaseStatusBannerProps> = ({
               <p className="text-slate-400 leading-relaxed text-[11px]">
                 Configured with <code className="text-slate-200">VITE_SUPABASE_URL</code> and{' '}
                 <code className="text-slate-200">VITE_SUPABASE_ANON_KEY</code> pointing to project{' '}
-                <span className="text-emerald-400">kdrifllxmjwsxonmttyr</span>.
+                <span className="text-emerald-400">kdriflxmjwsxonmttyr</span>.
               </p>
             </div>
 

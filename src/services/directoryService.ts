@@ -1,10 +1,5 @@
 import { DirectoryListing, DirectoryFilterState, NewListingSubmission } from '../types/directory';
-import { INITIAL_DIRECTORY_LISTINGS } from '../data/directoryData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
-
-const LOCAL_STORAGE_SUBMISSIONS_KEY = 'bdyatra_directory_submissions';
-const LOCAL_STORAGE_DIRECTORY_KEY = 'bdyatra_custom_directory_listings';
-const LOCAL_STORAGE_DELETED_LISTINGS_KEY = 'bdyatra_deleted_directory_listings';
 
 export interface AdminListingSubmission extends NewListingSubmission {
   id: string;
@@ -14,24 +9,6 @@ export interface AdminListingSubmission extends NewListingSubmission {
 }
 
 const INITIAL_MOCK_SUBMISSIONS: AdminListingSubmission[] = [];
-
-function getStoredCustomListings(): DirectoryListing[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_DIRECTORY_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function getStoredDeletedListings(): string[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_DELETED_LISTINGS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
 
 function mapDbListing(row: any): DirectoryListing {
   return {
@@ -76,18 +53,14 @@ export async function getDirectoryListings(filters?: DirectoryFilterState): Prom
 
       const { data, error } = await query;
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         listings = data.map(mapDbListing);
-      } else {
-        if (error) console.warn('[BDYatra Supabase] Directory fetch error:', error);
-        listings = INITIAL_DIRECTORY_LISTINGS.map((l) => mapDbListing(l));
+      } else if (error) {
+        console.warn('[BDYatra Supabase] Directory fetch error:', error.message);
       }
     } catch (err) {
       console.error('[BDYatra Supabase] Directory fetch exception:', err);
-      listings = INITIAL_DIRECTORY_LISTINGS.map((l) => mapDbListing(l));
     }
-  } else {
-    listings = INITIAL_DIRECTORY_LISTINGS.map((l) => mapDbListing(l));
   }
 
   let finalListings = [...listings];
@@ -124,16 +97,9 @@ export async function submitNewListing(
 ): Promise<{ success: boolean; message: string; listingId: string }> {
   const newId = `listing-sub-${Date.now()}`;
 
-  const adminSub: AdminListingSubmission = {
-    ...submission,
-    id: newId,
-    status: 'pending',
-    created_at: new Date().toISOString(),
-  };
-
   if (isSupabaseConfigured && supabase) {
     try {
-      await (supabase as any).from('listing_submissions').insert({
+      const { error } = await (supabase as any).from('listing_submissions').insert({
         id: newId,
         name: submission.name,
         category: submission.category,
@@ -149,24 +115,21 @@ export async function submitNewListing(
         services_text: submission.servicesText,
         status: 'pending',
       });
-    } catch {
-      // Fallback to local store
+
+      if (error) throw error;
+
+      return {
+        success: true,
+        message: 'Listing successfully submitted for editorial verification in Supabase.',
+        listingId: newId,
+      };
+    } catch (err: any) {
+      console.error('[BDYatra Supabase] Submission error:', err);
+      return { success: false, message: `Submission failed: ${err.message}`, listingId: '' };
     }
   }
 
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_SUBMISSIONS_KEY);
-    const existing: AdminListingSubmission[] = raw ? JSON.parse(raw) : INITIAL_MOCK_SUBMISSIONS;
-    localStorage.setItem(LOCAL_STORAGE_SUBMISSIONS_KEY, JSON.stringify([adminSub, ...existing]));
-  } catch {
-    // Ignore storage quota
-  }
-
-  return {
-    success: true,
-    message: 'Listing successfully submitted for editorial verification and admin review.',
-    listingId: newId,
-  };
+  return { success: false, message: 'Database not connected', listingId: '' };
 }
 
 /**
@@ -179,21 +142,12 @@ export async function getListingSubmissions(): Promise<AdminListingSubmission[]>
         .from('listing_submissions')
         .select('*')
         .order('created_at', { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data as AdminListingSubmission[];
       }
-    } catch {
-      // Fallback
+    } catch (err) {
+      console.warn('[BDYatra Supabase] getListingSubmissions error:', err);
     }
-  }
-
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_SUBMISSIONS_KEY);
-    if (raw) {
-      return JSON.parse(raw);
-    }
-  } catch {
-    // Ignore
   }
 
   return INITIAL_MOCK_SUBMISSIONS;
@@ -208,64 +162,54 @@ export async function updateListingSubmissionStatus(
   status: 'approved' | 'rejected',
   notes?: string
 ): Promise<{ success: boolean; message: string }> {
-  const submissions = await getListingSubmissions();
-  const target = submissions.find((s) => s.id === id);
-
-  if (!target) {
-    return { success: false, message: 'Submission not found.' };
-  }
-
-  target.status = status;
-  if (notes) target.admin_notes = notes;
-
   if (isSupabaseConfigured && supabase) {
     try {
-      await (supabase as any)
+      const { error } = await (supabase as any)
         .from('listing_submissions')
-        .update({ status })
+        .update({ status, admin_notes: notes })
         .eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Submission update error:', err);
+
+      if (error) throw error;
+
+      // If approved, create a verified directory listing
+      if (status === 'approved') {
+        // Fetch submission details to convert
+        const { data: sub } = await (supabase as any).from('listing_submissions').select('*').eq('id', id).single();
+        if (sub) {
+          const services = sub.services_text
+            ? sub.services_text.split(',').map((s: string) => s.trim()).filter(Boolean)
+            : ['Verified Hospitality'];
+
+          await createDirectoryListing({
+            name: sub.name,
+            category: sub.category,
+            division: sub.division_id,
+            district: sub.district,
+            description: sub.description,
+            priceRange: sub.price_range,
+            priceRate: sub.price_rate,
+            verified: true,
+            phone: sub.phone,
+            email: sub.email,
+            website: sub.website,
+            address: sub.address,
+            services,
+            published: true,
+          });
+        }
+      }
+
+      return {
+        success: true,
+        message: `Submission marked as ${status} in Supabase.`,
+      };
+    } catch (err: any) {
+      console.error('[BDYatra Supabase] Submission update error:', err);
+      return { success: false, message: `Update failed: ${err.message}` };
     }
   }
 
-  // Save updated submissions list
-  localStorage.setItem(LOCAL_STORAGE_SUBMISSIONS_KEY, JSON.stringify(submissions));
-
-  // If approved, create a verified directory listing
-  if (status === 'approved') {
-    const services = target.servicesText
-      ? target.servicesText.split(',').map((s) => s.trim()).filter(Boolean)
-      : ['Verified Hospitality'];
-
-    const newListing: DirectoryListing = {
-      id: `dir-${Date.now()}`,
-      name: target.name,
-      category: target.category,
-      division: target.division,
-      district: target.district,
-      description: target.description,
-      priceRange: target.priceRange || undefined,
-      priceRate: target.priceRate || undefined,
-      rating: 5.0,
-      reviewCount: 1,
-      verified: true,
-      phone: target.phone,
-      email: target.email || undefined,
-      website: target.website || undefined,
-      address: target.address,
-      services,
-      featured: false,
-      published: true,
-    };
-
-    await createDirectoryListing(newListing);
-  }
-
-  return {
-    success: true,
-    message: `Submission marked as ${status}.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -329,19 +273,15 @@ export async function createDirectoryListing(
         message: `Database Error: ${error.message}`,
       };
     }
+
+    return {
+      success: true,
+      data: newListing,
+      message: `Listing "${newListing.name}" created successfully in Supabase.`,
+    };
   }
 
-  const existing = getStoredCustomListings();
-  localStorage.setItem(LOCAL_STORAGE_DIRECTORY_KEY, JSON.stringify([newListing, ...existing]));
-
-  const deleted = getStoredDeletedListings().filter((id) => id !== newId);
-  localStorage.setItem(LOCAL_STORAGE_DELETED_LISTINGS_KEY, JSON.stringify(deleted));
-
-  return {
-    success: true,
-    data: newListing,
-    message: `Listing "${newListing.name}" created successfully and synced with Supabase.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -351,39 +291,26 @@ export async function updateDirectoryListing(
   id: string,
   updates: Partial<DirectoryListing>
 ): Promise<{ success: boolean; data?: DirectoryListing; message: string }> {
-  const all = await getDirectoryListings();
-  const target = all.find((l) => l.id === id);
-
-  if (!target) {
-    return { success: false, message: 'Listing not found.' };
-  }
-
-  const updated: DirectoryListing = {
-    ...target,
-    ...updates,
-    id,
-  };
-
   if (isSupabaseConfigured && supabase) {
     const payload = {
-      name: updated.name,
-      category: updated.category,
-      division_id: updated.division.toLowerCase(),
-      district_id: updated.district.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
-      description: updated.description,
-      price_range: updated.priceRange || null,
-      price_rate: updated.priceRate || null,
-      rating: updated.rating,
-      review_count: updated.reviewCount,
-      is_verified: updated.verified,
-      phone: updated.phone,
-      email: updated.email || null,
-      website: updated.website || null,
-      address: updated.address,
-      amenities: updated.services,
-      is_featured: updated.featured,
-      is_published: updated.published ?? true,
-      cover_image: updated.coverImage || null,
+      name: updates.name,
+      category: updates.category,
+      division_id: updates.division?.toLowerCase(),
+      district_id: updates.district?.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      description: updates.description,
+      price_range: updates.priceRange || null,
+      price_rate: updates.priceRate || null,
+      rating: updates.rating,
+      review_count: updates.reviewCount,
+      is_verified: updates.verified,
+      phone: updates.phone,
+      email: updates.email || null,
+      website: updates.website || null,
+      address: updates.address,
+      amenities: updates.services,
+      is_featured: updates.featured,
+      is_published: updates.published,
+      cover_image: updates.coverImage || null,
       updated_at: new Date().toISOString()
     };
 
@@ -396,16 +323,14 @@ export async function updateDirectoryListing(
         message: `Database Update Error: ${error.message}`,
       };
     }
+
+    return {
+      success: true,
+      message: `Listing updated successfully in Supabase.`,
+    };
   }
 
-  const existing = getStoredCustomListings().filter((l) => l.id !== id);
-  localStorage.setItem(LOCAL_STORAGE_DIRECTORY_KEY, JSON.stringify([updated, ...existing]));
-
-  return {
-    success: true,
-    data: updated,
-    message: `Listing "${updated.name}" updated successfully and synced.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -423,19 +348,11 @@ export async function deleteDirectoryListing(
         message: `Database Delete Error: ${error.message}`,
       };
     }
+    return {
+      success: true,
+      message: 'Listing removed successfully from Supabase.',
+    };
   }
 
-  const existing = getStoredCustomListings().filter((l) => l.id !== id);
-  localStorage.setItem(LOCAL_STORAGE_DIRECTORY_KEY, JSON.stringify(existing));
-
-  const deleted = getStoredDeletedListings();
-  if (!deleted.includes(id)) {
-    deleted.push(id);
-    localStorage.setItem(LOCAL_STORAGE_DELETED_LISTINGS_KEY, JSON.stringify(deleted));
-  }
-
-  return {
-    success: true,
-    message: 'Listing removed successfully from site and database.',
-  };
+  return { success: false, message: 'Database not connected' };
 }

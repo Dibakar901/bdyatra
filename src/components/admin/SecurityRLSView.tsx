@@ -60,18 +60,21 @@ CREATE POLICY "Admins have full access to blogs"
   USING (true)
   WITH CHECK (true);
 
--- 4. Directory Places & Listings Policies
-DROP POLICY IF EXISTS "Public can read published listings" ON public.directory_listings;
-CREATE POLICY "Public can read published listings"
-  ON public.directory_listings FOR SELECT
-  USING (published = true OR auth.role() = 'authenticated');
+-- 4. User Profiles Policies
+DROP POLICY IF EXISTS "Public can read published profiles" ON public.user_profiles;
+CREATE POLICY "Public can read published profiles"
+  ON public.user_profiles FOR SELECT
+  USING (true);
 
-DROP POLICY IF EXISTS "Admins have full access to directory" ON public.directory_listings;
-CREATE POLICY "Admins have full access to directory"
-  ON public.directory_listings FOR ALL
-  TO authenticated
-  USING (true)
-  WITH CHECK (true);
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.user_profiles;
+CREATE POLICY "Users can insert own profile"
+  ON public.user_profiles FOR INSERT
+  WITH CHECK (auth.uid() = id);
+
+DROP POLICY IF EXISTS "Users can update own profile" ON public.user_profiles;
+CREATE POLICY "Users can update own profile"
+  ON public.user_profiles FOR UPDATE
+  USING (auth.uid() = id);
 
 -- 5. User Listing Submissions
 DROP POLICY IF EXISTS "Anyone can submit a listing" ON public.listing_submissions;

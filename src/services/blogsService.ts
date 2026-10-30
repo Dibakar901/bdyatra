@@ -2,42 +2,18 @@ import { BlogRow } from '../types/supabase';
 import { EnrichedBlogPost } from '../types/blog';
 import { supabase, isSupabaseConfigured, handleSupabaseError } from '../lib/supabase';
 
-export const INITIAL_BLOGS: EnrichedBlogPost[] = [];
-
-const LOCAL_BLOGS_KEY = 'bdyatra_custom_blogs';
-const LOCAL_DELETED_BLOGS_KEY = 'bdyatra_deleted_blogs';
-
-function getStoredCustomBlogs(): EnrichedBlogPost[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_BLOGS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function getStoredDeletedBlogs(): string[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_DELETED_BLOGS_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
 function mapDbBlog(dbBlog: any): EnrichedBlogPost {
-  const matchedSeed = INITIAL_BLOGS.find((b) => b.slug === dbBlog.slug || b.id === dbBlog.id);
   return {
     id: dbBlog.id,
     title: dbBlog.title,
     slug: dbBlog.slug,
-    subtitle: dbBlog.subtitle || matchedSeed?.subtitle || dbBlog.excerpt,
+    subtitle: dbBlog.subtitle || dbBlog.excerpt,
     excerpt: dbBlog.excerpt || '',
     content: dbBlog.content || '',
     author_name: dbBlog.author_name || 'BDYatra Editorial Team',
     author_avatar: dbBlog.author_avatar || null,
-    authorRole: dbBlog.author_role || dbBlog.authorRole || matchedSeed?.authorRole || 'Senior Field Writer',
-    authorBio: dbBlog.author_bio || dbBlog.authorBio || matchedSeed?.authorBio,
+    authorRole: dbBlog.author_role || dbBlog.authorRole || 'Senior Field Writer',
+    authorBio: dbBlog.author_bio || dbBlog.authorBio,
     cover_image: dbBlog.cover_image || dbBlog.coverImage || '/src/assets/images/bdyatra_hero_delta_1793169488734.jpg',
     tags: Array.isArray(dbBlog.tags) ? dbBlog.tags : ['Travel Guide'],
     reading_time: dbBlog.reading_time || dbBlog.readingTime || '5 min read',
@@ -48,19 +24,14 @@ function mapDbBlog(dbBlog: any): EnrichedBlogPost {
     published_at: dbBlog.published_at || dbBlog.publishedAt || new Date().toISOString(),
     created_at: dbBlog.created_at || new Date().toISOString(),
     updated_at: dbBlog.updated_at || new Date().toISOString(),
-    estimatedBudget: dbBlog.estimated_budget || dbBlog.estimatedBudget || matchedSeed?.estimatedBudget,
-    difficulty: dbBlog.difficulty || matchedSeed?.difficulty || 'Easy',
-    idealSeason: dbBlog.ideal_season || dbBlog.idealSeason || matchedSeed?.idealSeason,
-    tableOfContents: matchedSeed?.tableOfContents,
-    sections: matchedSeed?.sections,
-    relatedBlogSlugs: matchedSeed?.relatedBlogSlugs,
+    estimatedBudget: dbBlog.estimated_budget || dbBlog.estimatedBudget,
+    difficulty: dbBlog.difficulty || 'Easy',
+    idealSeason: dbBlog.ideal_season || dbBlog.idealSeason,
   };
 }
 
 export async function getBlogs(tag?: string, includeUnpublished = false): Promise<EnrichedBlogPost[]> {
   let blogs: EnrichedBlogPost[] = [];
-  const deletedIds = getStoredDeletedBlogs();
-  const customBlogs = getStoredCustomBlogs();
 
   if (isSupabaseConfigured && supabase) {
     try {
@@ -78,31 +49,17 @@ export async function getBlogs(tag?: string, includeUnpublished = false): Promis
       }
 
       const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         blogs = data.map(mapDbBlog);
-      } else {
-        blogs = INITIAL_BLOGS.map(mapDbBlog);
+      } else if (error) {
+        console.warn('[BDYatra Supabase] Blog fetch error:', error.message);
       }
     } catch (err) {
-      handleSupabaseError(err, 'getBlogs exception');
-      blogs = INITIAL_BLOGS.map(mapDbBlog);
+      console.error('[BDYatra Supabase] Blog fetch exception:', err);
     }
-  } else {
-    blogs = INITIAL_BLOGS.map(mapDbBlog);
   }
 
-  // Merge custom blogs
-  const combinedMap = new Map<string, EnrichedBlogPost>();
-  blogs.forEach((b) => combinedMap.set(b.id, b));
-  customBlogs.forEach((c) => combinedMap.set(c.id, c));
-
-  let finalBlogs = Array.from(combinedMap.values()).filter(
-    (b) => !deletedIds.includes(b.id)
-  );
-
-  if (!includeUnpublished) {
-    finalBlogs = finalBlogs.filter((b) => b.is_published);
-  }
+  let finalBlogs = [...blogs];
 
   if (tag && tag !== 'All') {
     finalBlogs = finalBlogs.filter((b) =>
@@ -179,8 +136,6 @@ export async function createBlogPost(
       },
     ],
   };
-
-  // Attempt Supabase insert
   if (isSupabaseConfigured && supabase) {
     const { error } = await (supabase as any).from('blogs').insert({
       id: newId,
@@ -207,19 +162,15 @@ export async function createBlogPost(
         message: `Database Error: ${error.message}`,
       };
     }
+
+    return {
+      success: true,
+      data: newBlog,
+      message: `Article "${newBlog.title}" created successfully in Supabase.`,
+    };
   }
 
-  const existing = getStoredCustomBlogs();
-  localStorage.setItem(LOCAL_BLOGS_KEY, JSON.stringify([newBlog, ...existing]));
-
-  const deleted = getStoredDeletedBlogs().filter((id) => id !== newId);
-  localStorage.setItem(LOCAL_DELETED_BLOGS_KEY, JSON.stringify(deleted));
-
-  return {
-    success: true,
-    data: newBlog,
-    message: `Article "${newBlog.title}" created successfully and synced with Supabase.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -229,36 +180,22 @@ export async function updateBlogPost(
   id: string,
   updates: Partial<EnrichedBlogPost>
 ): Promise<{ success: boolean; data?: EnrichedBlogPost; message: string }> {
-  const all = await getBlogs('All', true);
-  const target = all.find((b) => b.id === id);
-
-  if (!target) {
-    return { success: false, message: 'Article not found.' };
-  }
-
-  const updated: EnrichedBlogPost = {
-    ...target,
-    ...updates,
-    id,
-    updated_at: new Date().toISOString(),
-  };
-
   if (isSupabaseConfigured && supabase) {
     const { error } = await (supabase as any)
       .from('blogs')
       .update({
-        title: updated.title,
-        slug: updated.slug,
-        excerpt: updated.excerpt,
-        content: updated.content,
-        author_name: updated.author_name,
-        author_avatar: updated.author_avatar,
-        cover_image: updated.cover_image,
-        tags: updated.tags,
-        reading_time: updated.reading_time,
-        is_featured: updated.is_featured,
-        is_published: updated.is_published,
-        updated_at: updated.updated_at,
+        title: updates.title,
+        slug: updates.slug,
+        excerpt: updates.excerpt,
+        content: updates.content,
+        author_name: updates.author_name,
+        author_avatar: updates.author_avatar,
+        cover_image: updates.cover_image,
+        tags: updates.tags,
+        reading_time: updates.reading_time,
+        is_featured: updates.is_featured,
+        is_published: updates.is_published,
+        updated_at: new Date().toISOString(),
       })
       .eq('id', id);
 
@@ -269,16 +206,14 @@ export async function updateBlogPost(
         message: `Database Update Error: ${error.message}`,
       };
     }
+
+    return {
+      success: true,
+      message: `Article updated successfully in Supabase.`,
+    };
   }
 
-  const existing = getStoredCustomBlogs().filter((b) => b.id !== id);
-  localStorage.setItem(LOCAL_BLOGS_KEY, JSON.stringify([updated, ...existing]));
-
-  return {
-    success: true,
-    data: updated,
-    message: `Article "${updated.title}" updated successfully and synced.`,
-  };
+  return { success: false, message: 'Database not connected' };
 }
 
 /**
@@ -296,19 +231,11 @@ export async function deleteBlogPost(
         message: `Database Delete Error: ${error.message}`,
       };
     }
+    return {
+      success: true,
+      message: 'Article removed successfully from Supabase.',
+    };
   }
 
-  const existing = getStoredCustomBlogs().filter((b) => b.id !== id);
-  localStorage.setItem(LOCAL_BLOGS_KEY, JSON.stringify(existing));
-
-  const deleted = getStoredDeletedBlogs();
-  if (!deleted.includes(id)) {
-    deleted.push(id);
-    localStorage.setItem(LOCAL_DELETED_BLOGS_KEY, JSON.stringify(deleted));
-  }
-
-  return {
-    success: true,
-    message: 'Article removed successfully from site and database.',
-  };
+  return { success: false, message: 'Database not connected' };
 }

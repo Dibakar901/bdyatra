@@ -15,6 +15,8 @@ import {
   TrendingUp,
   FileCheck,
   AlertCircle,
+  Database,
+  RefreshCw,
 } from 'lucide-react';
 import { AdminUser, AdminStatsSummary } from '../../types/auth';
 import { Destination } from '../../types/destination';
@@ -432,59 +434,103 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
 
               {/* Recent Activity stream */}
-              <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
-                    Recent Platform Operations
-                  </h3>
-                  <span className="text-xs text-slate-400">Live Sync</span>
+              <div className="lg:col-span-2 space-y-6">
+                <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                      Recent Platform Operations
+                    </h3>
+                    <span className="text-xs text-slate-400">Live Sync</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <FileCheck className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 text-xs">
+                        <div className="font-semibold text-slate-900">
+                          Editorial System Initialized
+                        </div>
+                        <p className="text-slate-500 mt-0.5">
+                          Connected to Supabase cluster <code>kdriflxmjwsxonmttyr.supabase.co</code>.
+                          Storage buckets configured for <code>destination-images</code>, <code>blog-covers</code>, and <code>place-photos</code>.
+                        </p>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Just now</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                      <div className="h-7 w-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
+                        <Building2 className="h-4 w-4" />
+                      </div>
+                      <div className="flex-1 text-xs">
+                        <div className="font-semibold text-slate-900">
+                          Hospitality Directory Live
+                        </div>
+                        <p className="text-slate-500 mt-0.5">
+                          Verified listings loaded for eco-resorts in Sreemangal, houseboats in Sunamganj, and heritage stays in Dhaka.
+                        </p>
+                        <span className="text-[10px] text-slate-400 mt-1 block">Active</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                    <div className="h-7 w-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <FileCheck className="h-4 w-4" />
+                {/* DB Initialization Utility */}
+                <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6 shadow-xl space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+                      <Database className="h-4 w-4" />
                     </div>
-                    <div className="flex-1 text-xs">
-                      <div className="font-semibold text-slate-900">
-                        Editorial System Initialized
-                      </div>
-                      <p className="text-slate-500 mt-0.5">
-                        Connected to Supabase cluster <code>kdrifllxmjwsxonmttyr.supabase.co</code>.
-                        Storage buckets configured for <code>destination-images</code>, <code>blog-covers</code>, and <code>place-photos</code>.
+                    <div>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                        System Initialization & Database Sync
+                      </h3>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Required for cross-device persistence and RLS write permissions.
                       </p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">Just now</span>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                    <div className="h-7 w-7 rounded-lg bg-sky-100 text-sky-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <Building2 className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 text-xs">
-                      <div className="font-semibold text-slate-900">
-                        Hospitality Directory Live
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <button
+                      onClick={async () => {
+                        const { seedDatabase } = await import('../../services/geoService');
+                        const res = await seedDatabase();
+                        showFeedback(res.message, res.success ? 'success' : 'error');
+                      }}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-emerald-500 hover:bg-slate-800/80 text-left transition-all cursor-pointer group"
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
+                          Seed Geography Metadata
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Ensures Divisions & Districts exist
+                        </div>
                       </div>
-                      <p className="text-slate-500 mt-0.5">
-                        Verified listings loaded for eco-resorts in Sreemangal, houseboats in Sunamganj, and heritage stays in Dhaka.
-                      </p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">Active</span>
-                    </div>
-                  </div>
+                      <RefreshCw className="h-3.5 w-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                    </button>
 
-                  <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-                    <div className="h-7 w-7 rounded-lg bg-purple-100 text-purple-700 flex items-center justify-center shrink-0 mt-0.5">
-                      <BookOpen className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 text-xs">
-                      <div className="font-semibold text-slate-900">
-                        SEO Metadata Synchronized
+                    <button
+                      onClick={async () => {
+                        const { ensureAdminProfile } = await import('../../services/authService');
+                        const res = await ensureAdminProfile(adminUser);
+                        showFeedback(res.message, res.success ? 'success' : 'error');
+                      }}
+                      className="flex items-center justify-between p-3 rounded-xl bg-slate-800 border border-slate-700 hover:border-emerald-500 hover:bg-slate-800/80 text-left transition-all cursor-pointer group"
+                    >
+                      <div>
+                        <div className="text-xs font-bold text-white group-hover:text-emerald-400 transition-colors">
+                          Sync Admin Profile
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          Enables RLS write permissions
+                        </div>
                       </div>
-                      <p className="text-slate-500 mt-0.5">
-                        OpenGraph tags, Twitter summary cards, and Schema.org JSON-LD structured data are active across all articles and directory views.
-                      </p>
-                      <span className="text-[10px] text-slate-400 mt-1 block">Active</span>
-                    </div>
+                      <ShieldCheck className="h-3.5 w-3.5 text-slate-500 group-hover:text-emerald-400 transition-colors" />
+                    </button>
                   </div>
                 </div>
               </div>

@@ -17,9 +17,9 @@ export interface SupabaseConfigStatus {
 export function getSupabaseConfigStatus(): SupabaseConfigStatus {
   return {
     isLive: true,
-    urlDisplay: 'https://kdrifllxmjwsxonmttyr.supabase.co',
+    urlDisplay: 'https://kdriflxmjwsxonmttyr.supabase.co',
     mode: 'supabase-cloud',
     statusMessage:
-      'Supabase client configured with project kdrifllxmjwsxonmttyr.supabase.co. Schema migration scripts prepared.',
+      'Supabase client configured with project kdriflxmjwsxonmttyr.supabase.co. Schema migration scripts prepared.',
   };
 }

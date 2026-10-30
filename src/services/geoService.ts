@@ -153,25 +153,21 @@ export const INITIAL_DISTRICTS: DistrictRow[] = [
 export async function getDivisions(): Promise<DivisionRow[]> {
   if (isSupabaseConfigured && supabase) {
     try {
-      const { data, error } = await supabase.from('divisions').select('*').order('name');
+      const { data, error } = await (supabase as any).from('divisions').select('*').order('name');
       if (!error && data && data.length > 0) {
         return data as DivisionRow[];
       }
-      if (error) {
-        handleSupabaseError(error, 'getDivisions');
-      }
     } catch (err) {
-      handleSupabaseError(err, 'getDivisions exception');
+      console.warn('[BDYatra Supabase] getDivisions error:', err);
     }
   }
-
   return [...INITIAL_DIVISIONS];
 }
 
 export async function getDistricts(divisionId?: string): Promise<DistrictRow[]> {
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase.from('districts').select('*').order('name');
+      let query = (supabase as any).from('districts').select('*').order('name');
       if (divisionId && divisionId !== 'all') {
         query = query.eq('division_id', divisionId.toLowerCase());
       }
@@ -179,11 +175,8 @@ export async function getDistricts(divisionId?: string): Promise<DistrictRow[]> 
       if (!error && data && data.length > 0) {
         return data as DistrictRow[];
       }
-      if (error) {
-        handleSupabaseError(error, 'getDistricts');
-      }
     } catch (err) {
-      handleSupabaseError(err, 'getDistricts exception');
+      console.warn('[BDYatra Supabase] getDistricts error:', err);
     }
   }
 
@@ -191,4 +184,34 @@ export async function getDistricts(divisionId?: string): Promise<DistrictRow[]> 
     return INITIAL_DISTRICTS.filter((d) => d.division_id === divisionId.toLowerCase());
   }
   return [...INITIAL_DISTRICTS];
+}
+
+export async function seedDatabase(): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Supabase not configured' };
+  }
+
+  try {
+    // 1. Seed Divisions
+    const { error: divError } = await (supabase as any)
+      .from('divisions')
+      .upsert(INITIAL_DIVISIONS, { onConflict: 'id' });
+
+    if (divError) throw divError;
+
+    // 2. Seed Districts
+    const { error: distError } = await (supabase as any)
+      .from('districts')
+      .upsert(INITIAL_DISTRICTS, { onConflict: 'id' });
+
+    if (distError) throw distError;
+
+    return {
+      success: true,
+      message: 'Geography metadata (Divisions & Districts) seeded successfully.',
+    };
+  } catch (err: any) {
+    console.error('[BDYatra Supabase] Seed error:', err);
+    return { success: false, message: `Seed failed: ${err.message}` };
+  }
 }

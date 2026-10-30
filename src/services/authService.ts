@@ -100,3 +100,57 @@ export async function signOutAdmin(): Promise<void> {
     console.warn('[BDYatra Auth] Sign out error:', err);
   }
 }
+/**
+ * Ensures the logged-in user has an admin profile in the user_profiles table.
+ * Critical for RLS-based write permissions.
+ */
+export async function ensureAdminProfile(user: AdminUser): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured || !supabase) {
+    return { success: false, message: 'Database not connected' };
+  }
+
+  try {
+    // 1. Check if profile exists
+    const { data: existing, error: fetchError } = await (supabase as any)
+      .from('user_profiles')
+      .select('*')
+      .eq('id', user.id)
+      .single();
+
+    if (fetchError && fetchError.code !== 'PGRST116') { // PGRST116 is single() not found
+      throw fetchError;
+    }
+
+    if (existing) {
+      if (existing.role === 'admin') {
+        return { success: true, message: 'Admin profile already active.' };
+      }
+      // If user exists but not admin, promote them!
+      const { error: updateError } = await (supabase as any)
+        .from('user_profiles')
+        .update({ role: 'admin' })
+        .eq('id', user.id);
+      
+      if (updateError) throw updateError;
+      return { success: true, message: 'Existing profile promoted to Admin.' };
+    }
+
+    // 2. Create new profile
+    const { error: insertError } = await (supabase as any)
+      .from('user_profiles')
+      .insert({
+        id: user.id,
+        email: user.email,
+        full_name: user.fullName,
+        role: 'admin',
+        avatar_url: user.avatarUrl,
+      });
+
+    if (insertError) throw insertError;
+
+    return { success: true, message: 'Admin profile created and initialized.' };
+  } catch (err: any) {
+    console.error('[BDYatra Supabase] Profile sync error:', err);
+    return { success: false, message: `Profile sync failed: ${err.message}` };
+  }
+}
