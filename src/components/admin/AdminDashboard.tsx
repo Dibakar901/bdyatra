@@ -32,13 +32,13 @@ interface AdminDashboardProps {
   directoryListings: DirectoryListing[];
   blogs: EnrichedBlogPost[];
   submissions: AdminListingSubmission[];
-  onSaveDestination: (dest: Partial<Destination>) => Promise<void>;
-  onDeleteDestination: (id: string) => Promise<void>;
-  onSaveListing: (listing: Partial<DirectoryListing>) => Promise<void>;
-  onDeleteListing: (id: string) => Promise<void>;
-  onUpdateSubmissionStatus: (id: string, status: 'approved' | 'rejected') => Promise<void>;
-  onSaveBlog: (blog: Partial<EnrichedBlogPost>) => Promise<void>;
-  onDeleteBlog: (id: string) => Promise<void>;
+  onSaveDestination: (dest: Partial<Destination>) => Promise<{ success: boolean; message: string }>;
+  onDeleteDestination: (id: string) => Promise<{ success: boolean; message: string }>;
+  onSaveListing: (listing: Partial<DirectoryListing>) => Promise<{ success: boolean; message: string }>;
+  onDeleteListing: (id: string) => Promise<{ success: boolean; message: string }>;
+  onUpdateSubmissionStatus: (id: string, status: 'approved' | 'rejected') => Promise<{ success: boolean; message: string }>;
+  onSaveBlog: (blog: Partial<EnrichedBlogPost>) => Promise<{ success: boolean; message: string }>;
+  onDeleteBlog: (id: string) => Promise<{ success: boolean; message: string }>;
   onSignOut: () => void;
   onReturnToSite: () => void;
 }
@@ -62,47 +62,82 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onReturnToSite,
 }) => {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
-  const [feedbackBanner, setFeedbackBanner] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const showFeedback = (msg: string) => {
-    setFeedbackBanner(msg);
-    setTimeout(() => setFeedbackBanner(null), 3500);
+  const showFeedback = (msg: string, type: 'success' | 'error' = 'success') => {
+    setFeedback({ message: msg, type });
+    setTimeout(() => setFeedback(null), 5000);
   };
 
   // Wrapped handlers to show feedback
   const handleSaveDestination = async (dest: Partial<Destination>) => {
-    await onSaveDestination(dest);
-    showFeedback('Destination saved and synced with Supabase.');
+    const result = await onSaveDestination(dest);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleDeleteDestination = async (id: string) => {
-    await onDeleteDestination(id);
-    showFeedback('Destination removed successfully.');
+    const result = await onDeleteDestination(id);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleSaveListing = async (listing: Partial<DirectoryListing>) => {
-    await onSaveListing(listing);
-    showFeedback('Hospitality listing saved successfully.');
+    const result = await onSaveListing(listing);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleDeleteListing = async (id: string) => {
-    await onDeleteListing(id);
-    showFeedback('Listing removed from directory.');
+    const result = await onDeleteListing(id);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleUpdateSubmission = async (id: string, status: 'approved' | 'rejected') => {
-    await onUpdateSubmissionStatus(id, status);
-    showFeedback(`Submission marked as ${status}.`);
+    const result = await onUpdateSubmissionStatus(id, status);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleSaveBlog = async (blog: Partial<EnrichedBlogPost>) => {
-    await onSaveBlog(blog);
-    showFeedback('Travel article saved and synced.');
+    const result = await onSaveBlog(blog);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   const handleDeleteBlog = async (id: string) => {
-    await onDeleteBlog(id);
-    showFeedback('Article removed successfully.');
+    const result = await onDeleteBlog(id);
+    if (result.success) {
+      showFeedback(result.message, 'success');
+    } else {
+      showFeedback(result.message, 'error');
+    }
+    return result;
   };
 
   // Statistics
@@ -207,11 +242,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       </header>
 
       {/* Toast Feedback Notification Banner */}
-      {feedbackBanner && (
+      {feedback && (
         <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom duration-200">
-          <div className="flex items-center gap-2.5 px-4 py-3 bg-slate-900 text-white rounded-xl shadow-xl border border-slate-700 text-sm">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span>{feedbackBanner}</span>
+          <div className={`flex items-center gap-2.5 px-4 py-3 rounded-xl shadow-xl border text-sm ${
+            feedback.type === 'success' 
+              ? 'bg-slate-900 text-white border-slate-700' 
+              : 'bg-red-600 text-white border-red-500'
+          }`}>
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 text-white shrink-0" />
+            )}
+            <span>{feedback.message}</span>
           </div>
         </div>
       )}

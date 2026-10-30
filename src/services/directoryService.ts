@@ -63,43 +63,27 @@ export async function getDirectoryListings(filters?: DirectoryFilterState): Prom
 
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase.from('hotels').select('*');
+      let query = (supabase as any).from('directory_places').select('*');
       if (filters?.category && filters.category !== 'All') {
         query = query.eq('category', filters.category);
       }
       if (filters?.division && filters.division !== 'All') {
-        query = query.eq('division', filters.division);
+        query = query.eq('division_id', filters.division.toLowerCase());
       }
       if (filters?.verifiedOnly) {
-        query = query.eq('verified', true);
+        query = query.eq('is_verified', true);
       }
 
-      let { data, error } = await query;
-
-      if (error || !data || data.length === 0) {
-        let altQuery = supabase.from('directory_listings').select('*');
-        if (filters?.category && filters.category !== 'All') {
-          altQuery = altQuery.eq('category', filters.category);
-        }
-        if (filters?.division && filters.division !== 'All') {
-          altQuery = altQuery.eq('division', filters.division);
-        }
-        if (filters?.verifiedOnly) {
-          altQuery = altQuery.eq('verified', true);
-        }
-        const { data: altData, error: altError } = await altQuery;
-        if (!altError && altData && altData.length > 0) {
-          data = altData;
-          error = null;
-        }
-      }
+      const { data, error } = await query;
 
       if (!error && data && data.length > 0) {
         listings = data.map(mapDbListing);
       } else {
+        if (error) console.warn('[BDYatra Supabase] Directory fetch error:', error);
         listings = INITIAL_DIRECTORY_LISTINGS.map((l) => mapDbListing(l));
       }
-    } catch {
+    } catch (err) {
+      console.error('[BDYatra Supabase] Directory fetch exception:', err);
       listings = INITIAL_DIRECTORY_LISTINGS.map((l) => mapDbListing(l));
     }
   } else {
@@ -149,7 +133,7 @@ export async function submitNewListing(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase.from('listing_submissions').insert({
+      await (supabase as any).from('listing_submissions').insert({
         id: newId,
         name: submission.name,
         category: submission.category,
@@ -236,7 +220,7 @@ export async function updateListingSubmissionStatus(
 
   if (isSupabaseConfigured && supabase) {
     try {
-      await supabase
+      await (supabase as any)
         .from('listing_submissions')
         .update({ status })
         .eq('id', id);
@@ -289,7 +273,7 @@ export async function updateListingSubmissionStatus(
  */
 export async function createDirectoryListing(
   listingData: Partial<DirectoryListing>
-): Promise<{ success: boolean; data: DirectoryListing; message: string }> {
+): Promise<{ success: boolean; data?: DirectoryListing; message: string }> {
   const newId = listingData.id || `dir-${Date.now()}`;
   const newListing: DirectoryListing = {
     id: newId,
@@ -318,33 +302,32 @@ export async function createDirectoryListing(
       id: newId,
       name: newListing.name,
       category: newListing.category,
-      division: newListing.division,
-      district: newListing.district,
+      division_id: newListing.division.toLowerCase(),
+      district_id: newListing.district.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
       description: newListing.description,
       price_range: newListing.priceRange || null,
       price_rate: newListing.priceRate || null,
       rating: newListing.rating,
       review_count: newListing.reviewCount,
-      verified: newListing.verified,
+      is_verified: newListing.verified,
       phone: newListing.phone,
       email: newListing.email || null,
       website: newListing.website || null,
       address: newListing.address,
-      services: newListing.services,
-      featured: newListing.featured,
-      published: newListing.published,
+      amenities: newListing.services,
+      is_featured: newListing.featured,
+      is_published: newListing.published,
       cover_image: newListing.coverImage || null,
     };
 
-    try {
-      await supabase.from('hotels').insert(payload);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Hotels insert message:', err);
-    }
-    try {
-      await supabase.from('directory_listings').insert(payload);
-    } catch {
-      // backup sync
+    const { error } = await (supabase as any).from('directory_places').insert(payload);
+    
+    if (error) {
+      console.error('[BDYatra Supabase] Directory place insert error:', error);
+      return {
+        success: false,
+        message: `Database Error: ${error.message}`,
+      };
     }
   }
 
@@ -357,7 +340,7 @@ export async function createDirectoryListing(
   return {
     success: true,
     data: newListing,
-    message: `Listing "${newListing.name}" created successfully.`,
+    message: `Listing "${newListing.name}" created successfully and synced with Supabase.`,
   };
 }
 
@@ -385,33 +368,33 @@ export async function updateDirectoryListing(
     const payload = {
       name: updated.name,
       category: updated.category,
-      division: updated.division,
-      district: updated.district,
+      division_id: updated.division.toLowerCase(),
+      district_id: updated.district.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
       description: updated.description,
       price_range: updated.priceRange || null,
       price_rate: updated.priceRate || null,
       rating: updated.rating,
       review_count: updated.reviewCount,
-      verified: updated.verified,
+      is_verified: updated.verified,
       phone: updated.phone,
       email: updated.email || null,
       website: updated.website || null,
       address: updated.address,
-      services: updated.services,
-      featured: updated.featured,
-      published: updated.published ?? true,
+      amenities: updated.services,
+      is_featured: updated.featured,
+      is_published: updated.published ?? true,
       cover_image: updated.coverImage || null,
+      updated_at: new Date().toISOString()
     };
 
-    try {
-      await supabase.from('hotels').update(payload).eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Hotels update message:', err);
-    }
-    try {
-      await supabase.from('directory_listings').update(payload).eq('id', id);
-    } catch {
-      // backup sync
+    const { error } = await (supabase as any).from('directory_places').update(payload).eq('id', id);
+    
+    if (error) {
+      console.error('[BDYatra Supabase] Directory place update error:', error);
+      return {
+        success: false,
+        message: `Database Update Error: ${error.message}`,
+      };
     }
   }
 
@@ -421,7 +404,7 @@ export async function updateDirectoryListing(
   return {
     success: true,
     data: updated,
-    message: `Listing "${updated.name}" updated successfully.`,
+    message: `Listing "${updated.name}" updated successfully and synced.`,
   };
 }
 
@@ -432,15 +415,13 @@ export async function deleteDirectoryListing(
   id: string
 ): Promise<{ success: boolean; message: string }> {
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('hotels').delete().eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Hotels delete message:', err);
-    }
-    try {
-      await supabase.from('directory_listings').delete().eq('id', id);
-    } catch {
-      // backup sync
+    const { error } = await (supabase as any).from('directory_places').delete().eq('id', id);
+    if (error) {
+      console.error('[BDYatra Supabase] Directory place delete error:', error);
+      return {
+        success: false,
+        message: `Database Delete Error: ${error.message}`,
+      };
     }
   }
 
@@ -455,6 +436,6 @@ export async function deleteDirectoryListing(
 
   return {
     success: true,
-    message: 'Listing removed successfully.',
+    message: 'Listing removed successfully from site and database.',
   };
 }

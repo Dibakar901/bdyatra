@@ -460,62 +460,72 @@ export default function App() {
 
   // Admin CRUD Handlers
   const handleAdminSaveDestination = async (destData: Partial<Destination>) => {
+    let result;
     if (destData.id && destinations.some((d) => d.id === destData.id)) {
-      await updateDestination(destData.id, destData);
+      result = await updateDestination(destData.id, destData);
     } else {
-      await createDestination(destData);
+      result = await createDestination(destData);
     }
     const refreshed = await getDestinations(destinationFilters);
     setDestinations(refreshed);
+    return result;
   };
 
   const handleAdminDeleteDestination = async (id: string) => {
-    await deleteDestination(id);
+    const result = await deleteDestination(id);
     const refreshed = await getDestinations(destinationFilters);
     setDestinations(refreshed);
+    return result;
   };
 
   const handleAdminSaveListing = async (listingData: Partial<DirectoryListing>) => {
+    let result;
     if (listingData.id && directoryListings.some((l) => l.id === listingData.id)) {
-      await updateDirectoryListing(listingData.id, listingData);
+      result = await updateDirectoryListing(listingData.id, listingData);
     } else {
-      await createDirectoryListing(listingData);
+      result = await createDirectoryListing(listingData);
     }
     const refreshed = await getDirectoryListings(directoryFilters);
     setDirectoryListings(refreshed);
+    return result;
   };
 
   const handleAdminDeleteListing = async (id: string) => {
-    await deleteDirectoryListing(id);
+    const result = await deleteDirectoryListing(id);
     const refreshed = await getDirectoryListings(directoryFilters);
     setDirectoryListings(refreshed);
+    return result;
   };
 
   const handleAdminUpdateSubmissionStatus = async (
     id: string,
     status: 'approved' | 'rejected'
   ) => {
-    await updateListingSubmissionStatus(id, status);
+    const result = await updateListingSubmissionStatus(id, status);
     const subs = await getListingSubmissions();
     setAdminSubmissions(subs);
     const refreshedListings = await getDirectoryListings(directoryFilters);
     setDirectoryListings(refreshedListings);
+    return result;
   };
 
   const handleAdminSaveBlog = async (blogData: Partial<EnrichedBlogPost>) => {
+    let result;
     if (blogData.id && allBlogsList.some((b) => b.id === blogData.id)) {
-      await updateBlogPost(blogData.id, blogData);
+      result = await updateBlogPost(blogData.id, blogData);
     } else {
-      await createBlogPost(blogData);
+      result = await createBlogPost(blogData);
     }
     const refreshed = await getBlogs('All', true);
     setAllBlogsList(refreshed);
+    return result;
   };
 
   const handleAdminDeleteBlog = async (id: string) => {
-    await deleteBlogPost(id);
+    const result = await deleteBlogPost(id);
     const refreshed = await getBlogs('All', true);
     setAllBlogsList(refreshed);
+    return result;
   };
 
   const handleAdminSignOut = async () => {

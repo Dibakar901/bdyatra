@@ -30,9 +30,9 @@ import { ImageUploader } from './ImageUploader';
 interface DirectoryCMSProps {
   listings: DirectoryListing[];
   submissions: AdminListingSubmission[];
-  onSaveListing: (listing: Partial<DirectoryListing>) => Promise<void>;
-  onDeleteListing: (id: string) => Promise<void>;
-  onUpdateSubmissionStatus: (id: string, status: 'approved' | 'rejected') => Promise<void>;
+  onSaveListing: (listing: Partial<DirectoryListing>) => Promise<{ success: boolean; message: string }>;
+  onDeleteListing: (id: string) => Promise<{ success: boolean; message: string }>;
+  onUpdateSubmissionStatus: (id: string, status: 'approved' | 'rejected') => Promise<{ success: boolean; message: string }>;
 }
 
 const CATEGORIES: DirectoryCategory[] = [

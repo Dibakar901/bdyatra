@@ -20,8 +20,8 @@ import { ImageUploader } from './ImageUploader';
 
 interface DestinationsCMSProps {
   destinations: Destination[];
-  onSaveDestination: (destination: Partial<Destination>) => Promise<void>;
-  onDeleteDestination: (id: string) => Promise<void>;
+  onSaveDestination: (destination: Partial<Destination>) => Promise<{ success: boolean; message: string }>;
+  onDeleteDestination: (id: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const DIVISIONS: BangladeshDivision[] = [

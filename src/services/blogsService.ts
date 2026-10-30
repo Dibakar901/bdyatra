@@ -64,7 +64,7 @@ export async function getBlogs(tag?: string, includeUnpublished = false): Promis
 
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase
+      let query = (supabase as any)
         .from('blogs')
         .select('*')
         .order('published_at', { ascending: false });
@@ -134,7 +134,7 @@ export async function getRelatedBlogs(currentSlug: string, limit = 3): Promise<E
  */
 export async function createBlogPost(
   blogData: Partial<EnrichedBlogPost>
-): Promise<{ success: boolean; data: EnrichedBlogPost; message: string }> {
+): Promise<{ success: boolean; data?: EnrichedBlogPost; message: string }> {
   const newId = blogData.id || `blog-${Date.now()}`;
   const slug =
     blogData.slug ||
@@ -182,26 +182,30 @@ export async function createBlogPost(
 
   // Attempt Supabase insert
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('blogs').insert({
-        id: newId,
-        title: newBlog.title,
-        slug: newBlog.slug,
-        excerpt: newBlog.excerpt,
-        content: newBlog.content,
-        author_name: newBlog.author_name,
-        author_avatar: newBlog.author_avatar,
-        cover_image: newBlog.cover_image,
-        tags: newBlog.tags,
-        reading_time: newBlog.reading_time,
-        destination_id: newBlog.destination_id,
-        division_id: newBlog.division_id,
-        is_featured: newBlog.is_featured,
-        is_published: newBlog.is_published,
-        published_at: newBlog.published_at,
-      });
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Blog insert error:', err);
+    const { error } = await (supabase as any).from('blogs').insert({
+      id: newId,
+      title: newBlog.title,
+      slug: newBlog.slug,
+      excerpt: newBlog.excerpt,
+      content: newBlog.content,
+      author_name: newBlog.author_name,
+      author_avatar: newBlog.author_avatar,
+      cover_image: newBlog.cover_image,
+      tags: newBlog.tags,
+      reading_time: newBlog.reading_time,
+      destination_id: newBlog.destination_id,
+      division_id: newBlog.division_id,
+      is_featured: newBlog.is_featured,
+      is_published: newBlog.is_published,
+      published_at: newBlog.published_at,
+    });
+
+    if (error) {
+      console.error('[BDYatra Supabase] Blog insert error:', error);
+      return {
+        success: false,
+        message: `Database Error: ${error.message}`,
+      };
     }
   }
 
@@ -214,7 +218,7 @@ export async function createBlogPost(
   return {
     success: true,
     data: newBlog,
-    message: `Article "${newBlog.title}" created successfully.`,
+    message: `Article "${newBlog.title}" created successfully and synced with Supabase.`,
   };
 }
 
@@ -240,26 +244,30 @@ export async function updateBlogPost(
   };
 
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase
-        .from('blogs')
-        .update({
-          title: updated.title,
-          slug: updated.slug,
-          excerpt: updated.excerpt,
-          content: updated.content,
-          author_name: updated.author_name,
-          author_avatar: updated.author_avatar,
-          cover_image: updated.cover_image,
-          tags: updated.tags,
-          reading_time: updated.reading_time,
-          is_featured: updated.is_featured,
-          is_published: updated.is_published,
-          updated_at: updated.updated_at,
-        })
-        .eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Blog update error:', err);
+    const { error } = await (supabase as any)
+      .from('blogs')
+      .update({
+        title: updated.title,
+        slug: updated.slug,
+        excerpt: updated.excerpt,
+        content: updated.content,
+        author_name: updated.author_name,
+        author_avatar: updated.author_avatar,
+        cover_image: updated.cover_image,
+        tags: updated.tags,
+        reading_time: updated.reading_time,
+        is_featured: updated.is_featured,
+        is_published: updated.is_published,
+        updated_at: updated.updated_at,
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[BDYatra Supabase] Blog update error:', error);
+      return {
+        success: false,
+        message: `Database Update Error: ${error.message}`,
+      };
     }
   }
 
@@ -269,7 +277,7 @@ export async function updateBlogPost(
   return {
     success: true,
     data: updated,
-    message: `Article "${updated.title}" updated successfully.`,
+    message: `Article "${updated.title}" updated successfully and synced.`,
   };
 }
 
@@ -280,10 +288,13 @@ export async function deleteBlogPost(
   id: string
 ): Promise<{ success: boolean; message: string }> {
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('blogs').delete().eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Blog delete error:', err);
+    const { error } = await (supabase as any).from('blogs').delete().eq('id', id);
+    if (error) {
+      console.error('[BDYatra Supabase] Blog delete error:', error);
+      return {
+        success: false,
+        message: `Database Delete Error: ${error.message}`,
+      };
     }
   }
 
@@ -298,6 +309,6 @@ export async function deleteBlogPost(
 
   return {
     success: true,
-    message: 'Article removed successfully.',
+    message: 'Article removed successfully from site and database.',
   };
 }

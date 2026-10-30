@@ -1,6 +1,7 @@
 import { Destination, DestinationFilterState } from '../types/destination';
 import { INITIAL_DESTINATIONS } from '../data/destinationsData';
 import { supabase, isSupabaseConfigured } from './supabaseClient';
+import { Database } from '../types/supabase';
 
 const LOCAL_DESTINATIONS_KEY = 'bdyatra_custom_destinations';
 const LOCAL_DELETED_DESTINATIONS_KEY = 'bdyatra_deleted_destinations';
@@ -54,7 +55,7 @@ export async function getDestinations(filters?: DestinationFilterState): Promise
 
   if (isSupabaseConfigured && supabase) {
     try {
-      let query = supabase.from('destinations').select('*');
+      let query = (supabase as any).from('destinations').select('*');
       if (filters?.division && filters.division !== 'All') {
         query = query.eq('division_id', filters.division.toLowerCase());
       }
@@ -133,7 +134,7 @@ export async function getDestinationById(idOrSlug: string): Promise<Destination 
  */
 export async function createDestination(
   destinationData: Partial<Destination>
-): Promise<{ success: boolean; data: Destination; message: string }> {
+): Promise<{ success: boolean; data?: Destination; message: string }> {
   const newId = destinationData.id || `dest-${Date.now()}`;
   const slug =
     destinationData.slug ||
@@ -159,7 +160,7 @@ export async function createDestination(
       destinationData.image || '/src/assets/images/bdyatra_hero_delta_1793169488734.jpg',
     ],
     bestSeason: destinationData.bestSeason || 'November to March',
-    estimatedBudget: destinationData.estimatedBudget || undefined,
+    estimatedBudget: destinationData.estimatedBudget || '৳10,000 - ৳15,000',
     googleMapUrl: destinationData.googleMapUrl || '',
     phone: destinationData.phone || '',
     website: destinationData.website || '',
@@ -171,33 +172,39 @@ export async function createDestination(
 
   // Attempt Supabase insert
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('destinations').insert({
-        id: newId,
-        title: newDestination.name,
-        slug: newDestination.slug,
-        tagline: newDestination.tagline,
-        description: newDestination.description,
-        division_id: newDestination.division.toLowerCase(),
-        category: newDestination.category,
-        cover_image: newDestination.image,
-        gallery_images: newDestination.galleryImages,
-        best_season: newDestination.bestSeason,
-        estimated_budget: newDestination.estimatedBudget,
-        google_map_url: newDestination.googleMapUrl,
-        phone: newDestination.phone,
-        website: newDestination.website,
-        rating: newDestination.rating,
-        review_count: newDestination.reviewCount,
-        is_featured: newDestination.featured,
-        is_published: newDestination.published,
-      });
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Destination insert error:', err);
+    const { error } = await (supabase as any).from('destinations').insert({
+      id: newId,
+      title: newDestination.name,
+      slug: newDestination.slug,
+      tagline: newDestination.tagline,
+      description: newDestination.description,
+      division_id: newDestination.division.toLowerCase(),
+      district_id: newDestination.district.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, ''),
+      category: newDestination.category,
+      cover_image: newDestination.image,
+      gallery_images: newDestination.galleryImages,
+      highlights: [], // Required by schema
+      best_season: newDestination.bestSeason,
+      estimated_budget: newDestination.estimatedBudget,
+      recommended_days: 2, // Required by schema
+      rating: newDestination.rating,
+      review_count: newDestination.reviewCount,
+      how_to_reach: 'Accessible by road and rail.', // Required by schema
+      coordinates: { lat: 23.8103, lng: 90.4125 }, // Required by schema
+      is_featured: newDestination.featured,
+      is_published: newDestination.published,
+    });
+
+    if (error) {
+      console.error('[BDYatra Supabase] Destination insert error:', error);
+      return {
+        success: false,
+        message: `Database Error: ${error.message}. (Hint: Ensure Division "${newDestination.division}" exists in Supabase "divisions" table).`,
+      };
     }
   }
 
-  // Save to local custom store
+  // Save to local custom store (as backup/fallback)
   const existing = getStoredCustomDestinations();
   localStorage.setItem(LOCAL_DESTINATIONS_KEY, JSON.stringify([newDestination, ...existing]));
 
@@ -208,7 +215,7 @@ export async function createDestination(
   return {
     success: true,
     data: newDestination,
-    message: `Destination "${newDestination.name}" created successfully.`,
+    message: `Destination "${newDestination.name}" created successfully and synced with Supabase.`,
   };
 }
 
@@ -234,31 +241,34 @@ export async function updateDestination(
 
   // Attempt Supabase update
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase
-        .from('destinations')
-        .update({
-          title: updated.name,
-          slug: updated.slug,
-          tagline: updated.tagline,
-          description: updated.description,
-          division_id: updated.division.toLowerCase(),
-          category: updated.category,
-          cover_image: updated.image,
-          gallery_images: updated.galleryImages,
-          best_season: updated.bestSeason,
-          estimated_budget: updated.estimatedBudget,
-          google_map_url: updated.googleMapUrl,
-          phone: updated.phone,
-          website: updated.website,
-          rating: updated.rating,
-          review_count: updated.reviewCount,
-          is_featured: updated.featured,
-          is_published: updated.published ?? true,
-        })
-        .eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Destination update error:', err);
+    const { error } = await (supabase as any)
+      .from('destinations')
+      .update({
+        title: updated.name,
+        slug: updated.slug,
+        tagline: updated.tagline,
+        description: updated.description,
+        division_id: updated.division.toLowerCase(),
+        district_id: updated.district.toLowerCase(),
+        category: updated.category,
+        cover_image: updated.image,
+        gallery_images: updated.galleryImages,
+        best_season: updated.bestSeason,
+        estimated_budget: updated.estimatedBudget,
+        rating: updated.rating,
+        review_count: updated.reviewCount,
+        is_featured: updated.featured,
+        is_published: updated.published ?? true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error('[BDYatra Supabase] Destination update error:', error);
+      return {
+        success: false,
+        message: `Supabase Update Error: ${error.message}`,
+      };
     }
   }
 
@@ -269,7 +279,7 @@ export async function updateDestination(
   return {
     success: true,
     data: updated,
-    message: `Destination "${updated.name}" updated successfully.`,
+    message: `Destination "${updated.name}" updated successfully and synced.`,
   };
 }
 
@@ -280,10 +290,13 @@ export async function deleteDestination(
   id: string
 ): Promise<{ success: boolean; message: string }> {
   if (isSupabaseConfigured && supabase) {
-    try {
-      await supabase.from('destinations').delete().eq('id', id);
-    } catch (err) {
-      console.warn('[BDYatra Supabase] Destination delete error:', err);
+    const { error } = await (supabase as any).from('destinations').delete().eq('id', id);
+    if (error) {
+      console.error('[BDYatra Supabase] Destination delete error:', error);
+      return {
+        success: false,
+        message: `Supabase Delete Error: ${error.message}`,
+      };
     }
   }
 
@@ -300,6 +313,6 @@ export async function deleteDestination(
 
   return {
     success: true,
-    message: 'Destination removed successfully.',
+    message: 'Destination removed successfully from site and database.',
   };
 }

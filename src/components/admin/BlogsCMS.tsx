@@ -20,8 +20,8 @@ import { ImageUploader } from './ImageUploader';
 
 interface BlogsCMSProps {
   blogs: EnrichedBlogPost[];
-  onSaveBlog: (blog: Partial<EnrichedBlogPost>) => Promise<void>;
-  onDeleteBlog: (id: string) => Promise<void>;
+  onSaveBlog: (blog: Partial<EnrichedBlogPost>) => Promise<{ success: boolean; message: string }>;
+  onDeleteBlog: (id: string) => Promise<{ success: boolean; message: string }>;
 }
 
 function generateSlug(title: string): string {
